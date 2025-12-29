@@ -81,6 +81,29 @@ State awareness:
 """
 }
 
+# -----------------------------
+# Mode validators
+# -----------------------------
+
+CRITIQUE_MARKERS = [
+    "however", "but", "risk", "problem", "downside",
+    "issue", "concern", "limitation", "flaw"
+]
+
+mode_violations = []
+
+
+def validate_brainstorm(response: str) -> dict:
+    lower = response.lower()
+    critique_hits = [w for w in CRITIQUE_MARKERS if w in lower]
+
+    return {
+        "critique_hits": critique_hits,
+        "critique_score": len(critique_hits),
+        "idea_count": len(
+            [line for line in response.splitlines() if line.strip()]
+        )
+    }
 
 # -----------------------------
 # Model setup
@@ -109,6 +132,20 @@ def chat(user_input: str) -> str:
         "system_prompt": MODES[current_mode],
         "input": user_input
     })
+
+    # -----------------------------
+    # Mode validation (post-response)
+    # -----------------------------
+    if current_mode == "brainstorm":
+        validation = validate_brainstorm(response.content)
+
+        if validation["critique_score"] > 0:
+            mode_violations.append({
+                "mode": current_mode,
+                "critique_hits": validation["critique_hits"],
+                "idea_count": validation["idea_count"],
+                "response": response.content
+            })
 
     conversation_history.append(HumanMessage(content=user_input))
     conversation_history.append(AIMessage(content=response.content))
@@ -161,6 +198,18 @@ def main():
 
         response = chat(user_input)
         print(f"\nClaude:\n{response}\n")
+
+    # -----------------------------
+    # Violation summary (on exit)
+    # -----------------------------
+    if mode_violations:
+        print("\nMode violations detected:")
+        for v in mode_violations:
+            print(
+                f"- Mode: {v['mode']}, "
+                f"Critique hits: {v['critique_hits']}, "
+                f"Idea count: {v['idea_count']}"
+            )
 
 # -----------------------------
 # Entry point
